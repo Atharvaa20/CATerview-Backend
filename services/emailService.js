@@ -1,38 +1,51 @@
 const nodemailer = require('nodemailer');
 
-// Create a transporter using SMTP
+// Create a transporter using Gmail SMTP
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: process.env.SMTP_PORT || 587,
-  secure: process.env.SMTP_SECURE === 'true',
+  service: 'gmail',
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
+    user: process.env.SMTP_USER, // Your caterview.otp@gmail.com
+    pass: process.env.SMTP_PASS, // Your Gmail App Password
   },
 });
 
-// Function to send email with dynamic content
+/**
+ * Function to send email with dynamic content
+ */
 const sendEmail = async (email, options) => {
   try {
     const { subject, html } = options;
-    
+    console.log(`Attempting to send email to: ${email} with subject: ${subject}`);
+
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      console.error('Email Error: SMTP_USER or SMTP_PASS is missing in environment variables');
+      throw new Error('Email credentials missing');
+    }
+
     const mailOptions = {
-      from: `"${process.env.EMAIL_FROM_NAME || 'CATerview'}" <${process.env.EMAIL_FROM || process.env.SMTP_USER}>`,
+      from: `"${process.env.EMAIL_FROM || process.env.EMAIL_FROM_NAME || 'CATerview'}" <${process.env.SMTP_USER}>`,
       to: email,
       subject: subject || 'Message from CATerview',
       html: html || ''
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log('Email sent: %s', info.messageId);
+    console.log('✅ Email sent successfully! Message ID:', info.messageId);
     return true;
   } catch (error) {
-    console.error('Error sending email:', error);
+    console.error('❌ Error sending email:');
+    console.error('Error Code:', error.code);
+    console.error('Error Message:', error.message);
+    if (error.code === 'EAUTH') {
+      console.error('DEBUG: Authentication failed. Please check your SMTP_USER and SMTP_PASS (App Password).');
+    }
     throw new Error('Failed to send email');
   }
 };
 
-// Function to send OTP email for verification
+/**
+ * Function to send OTP email for verification
+ */
 const sendOtpEmail = async (email, otp) => {
   const subject = 'Verify Your Email - CATerview';
   const html = `
@@ -52,7 +65,9 @@ const sendOtpEmail = async (email, otp) => {
   return sendEmail(email, { subject, html });
 };
 
-// Function to send password reset OTP email
+/**
+ * Function to send password reset OTP email
+ */
 const sendPasswordResetOtpEmail = async (email, otp) => {
   const subject = 'Password Reset OTP - CATerview';
   const html = `
@@ -77,3 +92,4 @@ module.exports = {
   sendPasswordResetOtpEmail,
   sendEmail
 };
+
