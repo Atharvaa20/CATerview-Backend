@@ -14,7 +14,7 @@ const sendEmail = async (email, options) => {
 
     console.log(`Attempting to send email via Brevo API to: ${email}`);
 
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    const response = await fetch('https://api.brevo.com/v3/emailCampaigns', {
       method: 'POST',
       headers: {
         'accept': 'application/json',
