@@ -1,12 +1,17 @@
 const nodemailer = require('nodemailer');
 
-// Create a transporter using Gmail SMTP
+// Create a transporter using Gmail SMTP with explicit settings
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false, // true for 465, false for 587
   auth: {
-    user: process.env.SMTP_USER, // Your caterview.otp@gmail.com
-    pass: process.env.SMTP_PASS, // Your Gmail App Password
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
   },
+  connectionTimeout: 20000, // 20 seconds
+  greetingTimeout: 20000,
+  socketTimeout: 20000,
 });
 
 /**
