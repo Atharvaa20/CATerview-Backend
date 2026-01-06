@@ -33,36 +33,42 @@ app.get('/', (req, res) => {
 
 // Initialize database and start server
 async function initializeDatabase() {
+  const PORT = process.env.PORT || 5000;
+
+  // Start the server FIRST so Render marks the deployment as successful
+  const server = app.listen(PORT, () => {
+    console.log(`🚀 Server is running on port ${PORT}`);
+    console.log('⏳ Initializing database connection...');
+  });
+
   try {
     // Test the database connection
     await sequelize.authenticate();
     console.log('✅ Database connection has been established successfully.');
-    
+
     // Sync models with database
     console.log('🔄 Syncing database models...');
     await sequelize.sync({ alter: process.env.NODE_ENV !== 'production' });
     console.log('✅ Database models synced successfully.');
-    
-    // Start the server after successful database sync
-    const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-    });
-    
+
     // Handle process termination
-    process.on('SIGTERM', gracefulShutdown);
-    process.on('SIGINT', gracefulShutdown);
-    
+    process.on('SIGTERM', () => gracefulShutdown(server));
+    process.on('SIGINT', () => gracefulShutdown(server));
+
   } catch (error) {
-    console.error('Unable to initialize database:', error);
-    process.exit(1);
+    console.error('❌ Unable to initialize database:', error.message);
+    console.error('The server will continue running, but DB-dependent routes will fail.');
   }
 }
 
 // Graceful shutdown handler
-async function gracefulShutdown() {
+async function gracefulShutdown(server) {
   console.log('Shutting down gracefully...');
   try {
+    if (server) {
+      server.close();
+      console.log('HTTP server closed.');
+    }
     await sequelize.close();
     console.log('Database connection closed.');
     process.exit(0);
@@ -78,7 +84,7 @@ app.use((err, req, res, next) => {
   if (res.headersSent) {
     return next(err);
   }
-  res.status(500).json({ 
+  res.status(500).json({
     error: 'Internal server error',
     details: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
   });
