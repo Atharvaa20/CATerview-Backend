@@ -1,49 +1,48 @@
-const nodemailer = require('nodemailer');
-
-// Create a transporter using Gmail SMTP with explicit settings
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // true for 465, false for 587
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  connectionTimeout: 20000, // 20 seconds
-  greetingTimeout: 20000,
-  socketTimeout: 20000,
-});
-
 /**
- * Function to send email with dynamic content
+ * Function to send email using Brevo API (HTTPS)
+ * This bypasses SMTP blocking on Render/Railway free plans.
  */
 const sendEmail = async (email, options) => {
   try {
     const { subject, html } = options;
-    console.log(`Attempting to send email to: ${email} with subject: ${subject}`);
+    const apiKey = process.env.BREVO_API_KEY;
 
-    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      console.error('Email Error: SMTP_USER or SMTP_PASS is missing in environment variables');
-      throw new Error('Email credentials missing');
+    if (!apiKey) {
+      console.error('Email Error: BREVO_API_KEY is missing');
+      throw new Error('Email service configuration missing');
     }
 
-    const mailOptions = {
-      from: `"${process.env.EMAIL_FROM || process.env.EMAIL_FROM_NAME || 'CATerview'}" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: subject || 'Message from CATerview',
-      html: html || ''
-    };
+    console.log(`Attempting to send email via Brevo API to: ${email}`);
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Email sent successfully! Message ID:', info.messageId);
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': apiKey,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        sender: {
+          name: process.env.EMAIL_FROM_NAME || 'CATerview',
+          email: process.env.SMTP_USER || 'caterview.otp@gmail.com'
+        },
+        to: [{ email: email }],
+        subject: subject,
+        htmlContent: html
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('Brevo API Error:', data);
+      throw new Error(data.message || 'Failed to send email via Brevo');
+    }
+
+    console.log('✅ Email sent successfully via Brevo API! Message ID:', data.messageId);
     return true;
   } catch (error) {
-    console.error('❌ Error sending email:');
-    console.error('Error Code:', error.code);
-    console.error('Error Message:', error.message);
-    if (error.code === 'EAUTH') {
-      console.error('DEBUG: Authentication failed. Please check your SMTP_USER and SMTP_PASS (App Password).');
-    }
+    console.error('❌ Error sending email:', error.message);
     throw new Error('Failed to send email');
   }
 };
@@ -97,4 +96,5 @@ module.exports = {
   sendPasswordResetOtpEmail,
   sendEmail
 };
+
 
