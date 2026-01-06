@@ -12,13 +12,18 @@ const sendEmail = async (email, options) => {
       throw new Error('Email service configuration missing');
     }
 
-    console.log(`Attempting to send email via Brevo API to: ${email}`);
+    // Sanitize the API key for extra safety (remove any hidden spaces/quotes)
+    const sanitizedApiKey = apiKey.trim().replace(/["']/g, '');
 
-    const response = await fetch('https://api.brevo.com/v3/emailCampaigns', {
+    console.log(`Attempting to send email via Brevo API to: ${email}`);
+    // Log key length for debugging without exposing the actual key
+    console.log(`API Key status: Loaded (Length: ${sanitizedApiKey.length})`);
+
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
         'accept': 'application/json',
-        'api-key': apiKey,
+        'api-key': sanitizedApiKey,
         'content-type': 'application/json'
       },
       body: JSON.stringify({
