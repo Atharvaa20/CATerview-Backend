@@ -18,9 +18,12 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd ~/CATerview-Backend
-            git pull origin master
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            nvm use 20
+
+            cd ~/caterview/backend
+            git pull origin master   # or main if renamed
             npm install --production
-            # Run migrations if you use them
-            # npm run db:migrate 
+
             pm2 restart caterview-backend || pm2 start server.js --name "caterview-backend"
