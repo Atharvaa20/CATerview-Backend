@@ -19,7 +19,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd ~/CATerview-Backend
-            git pull origin main
+            git pull origin master
             npm install --production
             # Run migrations if you use them
             # npm run db:migrate 
