@@ -20,7 +20,8 @@ const corsOptions = {
       'https://caterview.online',
       'https://www.caterview.online',
       'https://api.caterview.online',
-      'https://caterview.onrender.com'
+      'https://caterview.onrender.com',
+      'https://ca-terview-frontend.vercel.app'
     ].filter(Boolean).map(o => o.replace(/\/$/, ""));
 
     // Debug logging for CORS issues
@@ -37,7 +38,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token', 'Accept', 'Cache-Control', 'Pragma'],
   exposedHeaders: ['set-cookie']
 };
 app.use(cors(corsOptions));
