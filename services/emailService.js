@@ -1,53 +1,40 @@
+const nodemailer = require('nodemailer');
+
 /**
- * Function to send email using Brevo API (HTTPS)
- * This bypasses SMTP blocking on Render/Railway free plans.
+ * Configure Nodemailer transporter with SMTP
+ */
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT,
+  secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+});
+
+/**
+ * Function to send email using SMTP and Nodemailer
  */
 const sendEmail = async (email, options) => {
   try {
     const { subject, html } = options;
-    const apiKey = process.env.BREVO_API_KEY;
 
-    if (!apiKey) {
-      console.error('Email Error: BREVO_API_KEY is missing');
-      throw new Error('Email service configuration missing');
-    }
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || 'CATerview'}" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: subject,
+      html: html
+    };
 
-    // Sanitize the API key for extra safety (remove any hidden spaces/quotes)
-    const sanitizedApiKey = apiKey.trim().replace(/["']/g, '');
+    console.log(`Attempting to send email via SMTP to: ${email}`);
 
-    console.log(`Attempting to send email via Brevo API to: ${email}`);
-    // Log key length for debugging without exposing the actual key
-    console.log(`API Key status: Loaded (Length: ${sanitizedApiKey.length})`);
+    const info = await transporter.sendMail(mailOptions);
 
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: {
-        'accept': 'application/json',
-        'api-key': sanitizedApiKey,
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({
-        sender: {
-          name: process.env.EMAIL_FROM_NAME || 'CATerview',
-          email: process.env.SMTP_USER || 'caterview.otp@gmail.com'
-        },
-        to: [{ email: email }],
-        subject: subject,
-        htmlContent: html
-      })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('Brevo API Error:', data);
-      throw new Error(data.message || 'Failed to send email via Brevo');
-    }
-
-    console.log('✅ Email sent successfully via Brevo API! Message ID:', data.messageId);
+    console.log('✅ Email sent successfully via SMTP! Message ID:', info.messageId);
     return true;
   } catch (error) {
-    console.error('❌ Error sending email:', error.message);
+    console.error('❌ Error sending email via SMTP:', error.message);
     throw new Error('Failed to send email');
   }
 };
@@ -101,5 +88,6 @@ module.exports = {
   sendPasswordResetOtpEmail,
   sendEmail
 };
+
 
 
