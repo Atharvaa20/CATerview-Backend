@@ -2,6 +2,28 @@ const { InterviewExperience, College, User, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const asyncHandler = require('../utils/asyncHandler');
 
+/**
+ * @desc    Get administrative dashboard statistics
+ * @route   GET /api/admin/stats
+ * @access  Private/Admin
+ */
+exports.getAdminStats = asyncHandler(async (req, res) => {
+    const [totalExperiences, totalColleges, totalVerifiedExperiences] = await Promise.all([
+        InterviewExperience.count(),
+        College.count(),
+        InterviewExperience.count({ where: { isVerified: true } })
+    ]);
+
+    const stats = {
+        totalExperiences,
+        totalColleges,
+        totalVerifiedExperiences,
+        pendingExperiences: totalExperiences - totalVerifiedExperiences
+    };
+
+    res.json(stats);
+});
+
 // --- EXPERIENCE ADMINISTRATION ---
 
 const experienceIncludes = [
