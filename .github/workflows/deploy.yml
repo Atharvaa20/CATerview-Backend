@@ -23,7 +23,8 @@ jobs:
             nvm use 20
 
             cd ~/CATerview-Backend
-            git pull origin master   # or main if renamed
+            git pull origin master
             npm install --production
+            npm run db:migrate
 
             pm2 restart caterview-backend || pm2 start server.js --name "caterview-backend"
