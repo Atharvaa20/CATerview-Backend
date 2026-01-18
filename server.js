@@ -1,94 +1,49 @@
 require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
+const app = require('./app');
 const { sequelize } = require('./models');
-const { Op } = require('sequelize');
 
-const app = express();
+const PORT = process.env.PORT || 5000;
 
-// Import models
-const db = require('./models');
-const { User, InterviewExperience, College } = db;
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/experiences', require('./routes/experiences'));
-app.use('/api/users', require('./routes/users'));
-
-// Admin routes
-const adminRouter = require('./routes/admin');
-app.use('/api/admin', adminRouter);
-
-// College routes (non-admin)
-app.use('/api/colleges', require('./routes/colleges'));
-
-// Test route
-app.get('/', (req, res) => {
-  res.json({ message: 'Welcome to CATerview API' });
-});
-
-// Initialize database and start server
-async function initializeDatabase() {
-  const PORT = process.env.PORT || 5000;
-
-  // Start the server FIRST so Render marks the deployment as successful
-  const server = app.listen(PORT, () => {
-    console.log(`🚀 Server is running on port ${PORT}`);
-    console.log('⏳ Initializing database connection...');
-  });
-
+async function startServer() {
   try {
-    // Test the database connection
+    // 1. Connect to Database
     await sequelize.authenticate();
-    console.log('✅ Database connection has been established successfully.');
+    console.log('✅ Database connection established successfully.');
 
-    // Sync models with database
-    console.log('🔄 Syncing database models...');
-    await sequelize.sync({ alter: process.env.NODE_ENV !== 'production' });
-    console.log('✅ Database models synced successfully.');
-
-    // Handle process termination
-    process.on('SIGTERM', () => gracefulShutdown(server));
-    process.on('SIGINT', () => gracefulShutdown(server));
-
-  } catch (error) {
-    console.error('❌ Unable to initialize database:', error.message);
-    console.error('The server will continue running, but DB-dependent routes will fail.');
-  }
-}
-
-// Graceful shutdown handler
-async function gracefulShutdown(server) {
-  console.log('Shutting down gracefully...');
-  try {
-    if (server) {
-      server.close();
-      console.log('HTTP server closed.');
+    // 2. Sync Models (Only if needed)
+    // Production uses migrations, so we only sync with alter in dev
+    if (process.env.NODE_ENV !== 'production') {
+      await sequelize.sync({ alter: true });
+      console.log('🔄 Database models synced.');
+    } else {
+      // In production, just ensure tables exist
+      await sequelize.sync();
     }
-    await sequelize.close();
-    console.log('Database connection closed.');
-    process.exit(0);
+
+    // 3. Start Listening
+    const server = app.listen(PORT, () => {
+      console.log(`\n🚀 Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+      console.log(`🌍 API: http://localhost:${PORT}/api`);
+    });
+
+    // Handle Graceful Shutdown
+    const closeServer = () => {
+      console.log('\n👋 Closing server and DB connection...');
+      server.close(() => {
+        sequelize.close().then(() => {
+          console.log('💾 Connections closed. Goodbye!');
+          process.exit(0);
+        });
+      });
+    };
+
+    process.on('SIGTERM', closeServer);
+    process.on('SIGINT', closeServer);
+
   } catch (error) {
-    console.error('Error during shutdown:', error);
+    console.error('❌ Unable to start server:', error.message);
     process.exit(1);
   }
 }
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  if (res.headersSent) {
-    return next(err);
-  }
-  res.status(500).json({
-    error: 'Internal server error',
-    details: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
-  });
-});
-
-// Initialize database and start server
-initializeDatabase();
+startServer();

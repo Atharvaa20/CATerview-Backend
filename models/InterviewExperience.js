@@ -83,6 +83,19 @@ module.exports = (sequelize, Sequelize, DataTypes) => {
         min: 0
       }
     },
+    upvotes: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      validate: {
+        isInt: true,
+        min: 0
+      }
+    },
+    upvotedBy: {
+      type: DataTypes.JSONB,
+      field: 'upvoted_by',
+      defaultValue: []
+    },
     userId: {
       type: DataTypes.INTEGER,
       field: 'user_id',
@@ -172,7 +185,7 @@ module.exports = (sequelize, Sequelize, DataTypes) => {
   });
 
   // Instance methods
-  InterviewExperience.prototype.incrementViews = async function() {
+  InterviewExperience.prototype.incrementViews = async function () {
     return this.increment('views', { by: 1 });
   };
 
@@ -182,7 +195,7 @@ module.exports = (sequelize, Sequelize, DataTypes) => {
       foreignKey: 'userId',
       as: 'user'
     });
-    
+
     InterviewExperience.belongsTo(models.College, {
       foreignKey: 'collegeId',
       as: 'college'
