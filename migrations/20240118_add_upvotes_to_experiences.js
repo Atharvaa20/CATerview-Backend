@@ -2,23 +2,16 @@
 
 module.exports = {
     up: async (queryInterface, Sequelize) => {
-        // Add upvotes column
-        await queryInterface.addColumn('interview_experiences', 'upvotes', {
-            type: Sequelize.INTEGER,
-            defaultValue: 0,
-            allowNull: false
-        });
+        // Using raw SQL because the custom simple-migrate.js runner only provides the .query() method
+        console.log('Adding upvotes column...');
+        await queryInterface.query('ALTER TABLE interview_experiences ADD COLUMN IF NOT EXISTS upvotes INTEGER DEFAULT 0 NOT NULL');
 
-        // Add upvoted_by column
-        await queryInterface.addColumn('interview_experiences', 'upvoted_by', {
-            type: Sequelize.JSONB,
-            defaultValue: [],
-            allowNull: false
-        });
+        console.log('Adding upvoted_by column...');
+        await queryInterface.query('ALTER TABLE interview_experiences ADD COLUMN IF NOT EXISTS upvoted_by JSONB DEFAULT \'[]\'::jsonb NOT NULL');
     },
 
     down: async (queryInterface, Sequelize) => {
-        await queryInterface.removeColumn('interview_experiences', 'upvotes');
-        await queryInterface.removeColumn('interview_experiences', 'upvoted_by');
+        await queryInterface.query('ALTER TABLE interview_experiences DROP COLUMN IF EXISTS upvotes');
+        await queryInterface.query('ALTER TABLE interview_experiences DROP COLUMN IF EXISTS upvoted_by');
     }
 };
