@@ -8,6 +8,9 @@ require('dotenv').config();
 
 const app = express();
 
+// Trust Proxy (Essential for Nginx + Rate Limiting)
+app.set('trust proxy', 1);
+
 // Security Middleware
 app.use(helmet());
 
@@ -26,10 +29,16 @@ const corsOptions = {
       process.env.FRONTEND_URL,
       'http://localhost:3000',
       'https://caterview.online',
+      'https://www.caterview.online',
       'https://api.caterview.online'
-    ].filter(Boolean);
+    ].filter(Boolean).map(o => o.replace(/\/$/, "")); // Remove trailing slashes
 
-    // Allow requests with no origin (like mobile apps or curl)
+    // Debug logging for CORS issues (visible in PM2 logs)
+    if (process.env.NODE_ENV === 'production' && origin && !allowedOrigins.includes(origin)) {
+      console.log('🚫 CORS Rejected Origin:', origin);
+      console.log('✅ Allowed Origins:', allowedOrigins);
+    }
+
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
