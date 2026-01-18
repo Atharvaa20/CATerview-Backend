@@ -8,21 +8,10 @@ require('dotenv').config();
 
 const app = express();
 
-// Trust Proxy (Essential for Nginx + Rate Limiting)
+// 1. TRUST PROXY (First, for correct IP detection)
 app.set('trust proxy', 1);
 
-// Security Middleware
-app.use(helmet());
-
-// Rate Limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
-  message: 'Too many requests from this IP, please try again later'
-});
-app.use('/api/', limiter);
-
-// CORS
+// 2. CORS (Must be BEFORE Rate Limit and Helmet)
 const corsOptions = {
   origin: (origin, callback) => {
     const allowedOrigins = [
@@ -30,13 +19,14 @@ const corsOptions = {
       'http://localhost:3000',
       'https://caterview.online',
       'https://www.caterview.online',
-      'https://api.caterview.online'
-    ].filter(Boolean).map(o => o.replace(/\/$/, "")); // Remove trailing slashes
+      'https://api.caterview.online',
+      'https://caterview.onrender.com'
+    ].filter(Boolean).map(o => o.replace(/\/$/, ""));
 
-    // Debug logging for CORS issues (visible in PM2 logs)
-    if (process.env.NODE_ENV === 'production' && origin && !allowedOrigins.includes(origin)) {
-      console.log('🚫 CORS Rejected Origin:', origin);
-      console.log('✅ Allowed Origins:', allowedOrigins);
+    // Debug logging for CORS issues
+    if (origin && !allowedOrigins.includes(origin)) {
+      console.log('CORS Rejected Origin:', origin);
+      console.log('Allowed Origins:', allowedOrigins);
     }
 
     if (!origin || allowedOrigins.includes(origin)) {
@@ -53,24 +43,28 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
-// Logging
+// 3. SECURITY & LOGGING
+app.use(helmet());
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
 
-// Body Parsing
+// 4. RATE LIMITING
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests, please try again later' }
+});
+app.use('/api/', limiter);
+
+// 5. BODY PARSING
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
-// Static Files
+// 6. STATIC FILES
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Root Route
-app.get('/', (req, res) => {
-  res.json({ message: 'Welcome to CATerview API' });
-});
-
-// API Routes
+// 7. ROUTES
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/colleges', require('./routes/colleges'));
 app.use('/api/experiences', require('./routes/experiences'));
@@ -78,42 +72,24 @@ app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/admin', require('./routes/admin'));
 
-// Health Check
+app.get('/', (req, res) => {
+  res.json({ message: 'Welcome to CATerview API' });
+});
+
 app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    message: 'Server is running',
-    timestamp: new Date().toISOString()
-  });
+  res.status(200).json({ status: 'success', message: 'Server is running' });
 });
 
-// 404 Handler
+// 8. ERROR HANDLING
 app.use((req, res) => {
-  res.status(404).json({
-    status: 'error',
-    message: `Can't find ${req.originalUrl} on this server!`
-  });
+  res.status(404).json({ status: 'error', message: `Not found: ${req.originalUrl}` });
 });
 
-// Global Error Handler
 app.use((err, req, res, next) => {
-  console.error('💥 ERROR:', {
-    message: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    timestamp: new Date().toISOString()
-  });
-
-  const statusCode = err.statusCode || 500;
-  const status = err.status || 'error';
-
-  res.status(statusCode).json({
-    status,
-    message: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
-    // Handle Sequelize validation errors
-    ...(err.name === 'SequelizeValidationError' && {
-      errors: err.errors.map(e => e.message)
-    })
+  console.error('GLOBAL ERROR:', err.message);
+  res.status(err.statusCode || 500).json({
+    status: 'error',
+    message: err.message || 'Internal server error'
   });
 });
 
