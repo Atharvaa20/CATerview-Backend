@@ -22,7 +22,7 @@ jobs:
             [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
             nvm use 20
 
-            cd ~/caterview/backend
+            cd ~/CATerview-Backend
             git pull origin master   # or main if renamed
             npm install --production
 
