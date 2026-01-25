@@ -74,7 +74,7 @@ exports.getVerifiedExperiences = asyncHandler(async (req, res) => {
 });
 
 exports.getAdminExperienceById = asyncHandler(async (req, res) => {
-    const experience = await InterviewExperience.findByPk(req.params.id, {
+    const experience = await InterviewExperience.unscoped().findByPk(req.params.id, {
         include: experienceIncludes
     });
 
@@ -85,7 +85,7 @@ exports.getAdminExperienceById = asyncHandler(async (req, res) => {
 });
 
 exports.verifyExperience = asyncHandler(async (req, res) => {
-    const experience = await InterviewExperience.findByPk(req.params.id);
+    const experience = await InterviewExperience.unscoped().findByPk(req.params.id);
     if (!experience) {
         throw new ApiError(404, 'Experience not found');
     }
@@ -95,7 +95,7 @@ exports.verifyExperience = asyncHandler(async (req, res) => {
 });
 
 exports.rejectExperience = asyncHandler(async (req, res) => {
-    const experience = await InterviewExperience.findByPk(req.params.id);
+    const experience = await InterviewExperience.unscoped().findByPk(req.params.id);
     if (!experience) {
         throw new ApiError(404, 'Experience not found');
     }
