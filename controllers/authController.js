@@ -1,10 +1,11 @@
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 const { Op } = require('sequelize');
 const { sendOtpEmail, sendPasswordResetOtpEmail } = require('../services/emailService');
 const { generateOTP, getOtpExpiryTime, isOtpExpired } = require('../utils/otpGenerator');
 const asyncHandler = require('../utils/asyncHandler');
+const ApiError = require('../utils/apiError');
+const ApiResponse = require('../utils/apiResponse');
 
 /**
  * @desc    Register a new user & send OTP
@@ -15,7 +16,7 @@ exports.register = asyncHandler(async (req, res) => {
     const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
-        return res.status(400).json({ error: 'Missing required fields' });
+        throw new ApiError(400, 'All fields (name, email, password) are required');
     }
 
     // Check if user already exists
@@ -23,7 +24,7 @@ exports.register = asyncHandler(async (req, res) => {
 
     if (existingUser) {
         if (existingUser.isVerified) {
-            return res.status(400).json({ error: 'Email already registered' });
+            throw new ApiError(400, 'Email already registered and verified');
         }
         // Update existing unverified user
         existingUser.name = name;
@@ -41,10 +42,7 @@ exports.register = asyncHandler(async (req, res) => {
     await User.update({ otp, otpExpires }, { where: { email } });
     await sendOtpEmail(email, otp);
 
-    res.status(200).json({
-        message: 'Verification OTP sent to your email',
-        email
-    });
+    return ApiResponse.success(res, { email }, 'Verification OTP sent to your email');
 });
 
 /**
@@ -56,16 +54,16 @@ exports.verifyOtp = asyncHandler(async (req, res) => {
     const { email, otp } = req.body;
 
     if (!email || !otp) {
-        return res.status(400).json({ error: 'Email and OTP are required' });
+        throw new ApiError(400, 'Email and OTP are required');
     }
 
     const user = await User.findOne({ where: { email } });
     if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        throw new ApiError(404, 'User not found');
     }
 
     if (user.otp !== otp || isOtpExpired(user.otpExpires)) {
-        return res.status(400).json({ error: 'Invalid or expired OTP' });
+        throw new ApiError(400, 'Invalid or expired OTP');
     }
 
     user.isVerified = true;
@@ -73,20 +71,17 @@ exports.verifyOtp = asyncHandler(async (req, res) => {
     user.otpExpires = null;
     await user.save();
 
-    // Fix: Ensure expiresIn is a valid truthy string or number
     const expiresIn = process.env.JWT_EXPIRE || process.env.JWT_EXPIRES_IN || '7d';
-
     const token = jwt.sign(
         { userId: user.id, role: user.role },
         process.env.JWT_SECRET,
         { expiresIn }
     );
 
-    res.status(200).json({
-        message: 'Email verified successfully',
+    return ApiResponse.success(res, {
         user: { id: user.id, name: user.name, email: user.email, role: user.role },
         token
-    });
+    }, 'Email verified successfully');
 });
 
 /**
@@ -98,33 +93,31 @@ exports.login = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-        return res.status(400).json({ error: 'Missing required fields' });
+        throw new ApiError(400, 'Email and password are required');
     }
 
     const user = await User.findOne({ where: { email } });
 
     if (!user || !user.isVerified) {
-        return res.status(401).json({ error: 'Invalid credentials or unverified account' });
+        throw new ApiError(401, 'Invalid credentials or unverified account');
     }
 
     const isValidPassword = await user.validPassword(password);
     if (!isValidPassword) {
-        return res.status(401).json({ error: 'Invalid credentials' });
+        throw new ApiError(401, 'Invalid credentials');
     }
 
-    // Fix: Ensure expiresIn is a valid truthy string or number
     const expiresIn = process.env.JWT_EXPIRE || process.env.JWT_EXPIRES_IN || '7d';
-
     const token = jwt.sign(
         { userId: user.id, role: user.role },
         process.env.JWT_SECRET,
         { expiresIn }
     );
 
-    res.json({
+    return ApiResponse.success(res, {
         user: { id: user.id, name: user.name, email: user.email, role: user.role },
         token
-    });
+    }, 'Login successful');
 });
 
 /**
@@ -134,6 +127,10 @@ exports.login = asyncHandler(async (req, res) => {
  */
 exports.forgotPassword = asyncHandler(async (req, res) => {
     const { email } = req.body;
+
+    if (!email) {
+        throw new ApiError(400, 'Email is required');
+    }
 
     const user = await User.findOne({ where: { email } });
     if (user) {
@@ -147,8 +144,8 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
         await sendPasswordResetOtpEmail(email, otp);
     }
 
-    // Same message for security
-    res.json({ message: 'If your email is registered, you will receive an OTP' });
+    // Always return same message for security reasons
+    return ApiResponse.success(res, null, 'If your email is registered, you will receive an OTP');
 });
 
 /**
@@ -159,8 +156,12 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
 exports.resetPassword = asyncHandler(async (req, res) => {
     const { email, otp, newPassword } = req.body;
 
+    if (!email || !otp || !newPassword) {
+        throw new ApiError(400, 'Missing required fields');
+    }
+
     if (newPassword.length < 6) {
-        return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+        throw new ApiError(400, 'Password must be at least 6 characters long');
     }
 
     const user = await User.findOne({
@@ -172,7 +173,7 @@ exports.resetPassword = asyncHandler(async (req, res) => {
     });
 
     if (!user) {
-        return res.status(400).json({ error: 'Invalid or expired OTP' });
+        throw new ApiError(400, 'Invalid or expired OTP');
     }
 
     user.password = newPassword;
@@ -180,7 +181,7 @@ exports.resetPassword = asyncHandler(async (req, res) => {
     user.resetPasswordOtpExpires = null;
     await user.save();
 
-    res.json({ message: 'Password has been reset successfully' });
+    return ApiResponse.success(res, null, 'Password has been reset successfully');
 });
 
 /**
@@ -191,9 +192,13 @@ exports.resetPassword = asyncHandler(async (req, res) => {
 exports.resendOtp = asyncHandler(async (req, res) => {
     const { email } = req.body;
 
+    if (!email) {
+        throw new ApiError(400, 'Email is required');
+    }
+
     const user = await User.findOne({ where: { email } });
     if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        throw new ApiError(404, 'User not found');
     }
 
     const otp = generateOTP();
@@ -205,5 +210,5 @@ exports.resendOtp = asyncHandler(async (req, res) => {
 
     await sendOtpEmail(email, otp);
 
-    res.json({ message: 'New OTP sent to your email' });
+    return ApiResponse.success(res, null, 'New OTP sent to your email');
 });

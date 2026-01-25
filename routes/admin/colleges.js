@@ -4,6 +4,6 @@ const adminController = require('../../controllers/adminController');
 
 router.get('/', adminController.getAllAdminColleges);
 router.post('/', adminController.createCollege);
-router.put('/:id', adminController.updateCollege);
+router.put('/:id(\\d+)', adminController.updateCollege);
 
 module.exports = router;

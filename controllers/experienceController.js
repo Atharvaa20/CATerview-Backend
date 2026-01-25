@@ -1,6 +1,8 @@
-const { InterviewExperience, User } = require('../models');
+const { InterviewExperience, User, College } = require('../models');
 const { Op } = require('sequelize');
 const asyncHandler = require('../utils/asyncHandler');
+const ApiError = require('../utils/apiError');
+const ApiResponse = require('../utils/apiResponse');
 
 /**
  * @desc    Get all experiences with optional filters
@@ -15,7 +17,7 @@ exports.getAllExperiences = asyncHandler(async (req, res) => {
         where.userId = userId;
     }
 
-    const experiences = await InterviewExperience.findAll({
+    const { count, rows } = await InterviewExperience.findAndCountAll({
         where,
         order: [['createdAt', 'DESC']],
         include: [
@@ -23,11 +25,16 @@ exports.getAllExperiences = asyncHandler(async (req, res) => {
                 model: User,
                 as: 'user',
                 attributes: ['name', 'email']
+            },
+            {
+                model: College,
+                as: 'college',
+                attributes: ['name']
             }
         ]
     });
 
-    res.json(experiences);
+    return ApiResponse.success(res, { count, experiences: rows }, 'Experiences fetched successfully');
 });
 
 /**
@@ -49,23 +56,26 @@ exports.filterExperiences = asyncHandler(async (req, res) => {
 
     if (college) where.collegeId = college;
     if (year) where.year = year;
+
+    // Background filter (usually stored in profile.category)
     if (background) {
         where.profile = {
-            ...where.profile,
+            ...(where.profile || {}),
             category: background
         };
     }
+
     if (percentileRange) {
         const minPercentile = parseInt(percentileRange);
         if (!isNaN(minPercentile)) {
             where.profile = {
-                ...where.profile,
+                ...(where.profile || {}),
                 catPercentile: { [Op.gte]: minPercentile }
             };
         }
     }
 
-    const experiences = await InterviewExperience.findAll({
+    const { count, rows } = await InterviewExperience.findAndCountAll({
         where: {
             isVerified: true,
             ...where
@@ -74,7 +84,12 @@ exports.filterExperiences = asyncHandler(async (req, res) => {
             {
                 model: User,
                 as: 'user',
-                attributes: ['name', 'email']
+                attributes: ['name']
+            },
+            {
+                model: College,
+                as: 'college',
+                attributes: ['name']
             }
         ],
         limit,
@@ -82,7 +97,7 @@ exports.filterExperiences = asyncHandler(async (req, res) => {
         order: [['createdAt', 'DESC']]
     });
 
-    res.json(experiences);
+    return ApiResponse.success(res, { count, experiences: rows }, 'Filtered experiences fetched successfully');
 });
 
 /**
@@ -101,11 +116,8 @@ exports.submitExperience = asyncHandler(async (req, res) => {
         title
     } = req.body;
 
-    if (!year || !profile || !watSummary || !piQuestions || !finalRemarks || !collegeId) {
-        return res.status(400).json({
-            success: false,
-            error: 'Missing required fields'
-        });
+    if (!year || !profile || !collegeId) {
+        throw new ApiError(400, 'Missing required fields: year, profile, and college are required');
     }
 
     const experience = await InterviewExperience.create({
@@ -116,15 +128,11 @@ exports.submitExperience = asyncHandler(async (req, res) => {
         watSummary,
         piQuestions,
         finalRemarks,
-        title,
+        title: title || `Interview Experience ${year}`,
         isVerified: false
     });
 
-    res.status(201).json({
-        success: true,
-        message: 'Experience submitted successfully',
-        data: experience
-    });
+    return ApiResponse.success(res, experience, 'Experience submitted successfully! It will be reviewed by our team.', 201);
 });
 
 /**
@@ -138,17 +146,14 @@ exports.getMyExperiences = asyncHandler(async (req, res) => {
         order: [['createdAt', 'DESC']],
         include: [
             {
-                model: User,
-                as: 'user',
-                attributes: ['name', 'email']
+                model: College,
+                as: 'college',
+                attributes: ['name']
             }
         ]
     });
 
-    res.json({
-        success: true,
-        data: experiences
-    });
+    return ApiResponse.success(res, experiences, 'My experiences fetched successfully');
 });
 
 /**
@@ -162,16 +167,25 @@ exports.getExperienceById = asyncHandler(async (req, res) => {
             {
                 model: User,
                 as: 'user',
-                attributes: ['name', 'email']
+                attributes: ['name']
+            },
+            {
+                model: College,
+                as: 'college',
+                attributes: ['id', 'name']
             }
         ]
     });
 
     if (!experience) {
-        return res.status(404).json({ error: 'Experience not found' });
+        throw new ApiError(404, 'Experience not found');
     }
 
-    res.json(experience);
+    // Optional: Increment view count
+    experience.views = (experience.views || 0) + 1;
+    await experience.save();
+
+    return ApiResponse.success(res, experience, 'Experience details fetched successfully');
 });
 
 /**
@@ -182,22 +196,26 @@ exports.getExperienceById = asyncHandler(async (req, res) => {
 exports.toggleHelpful = asyncHandler(async (req, res) => {
     const experience = await InterviewExperience.findByPk(req.params.id);
     if (!experience) {
-        return res.status(404).json({ error: 'Experience not found' });
+        throw new ApiError(404, 'Experience not found');
     }
 
-    const hasVoted = experience.upvotedBy?.includes(req.user.id);
+    const userId = req.user.id;
+    let upvotedByList = Array.isArray(experience.upvotedBy) ? experience.upvotedBy : [];
+    const hasVoted = upvotedByList.includes(userId);
+
     if (hasVoted) {
-        experience.upvotedBy = experience.upvotedBy.filter(id => id !== req.user.id);
-        experience.upvotes--;
+        upvotedByList = upvotedByList.filter(id => id !== userId);
+        experience.upvotes = Math.max(0, (experience.upvotes || 0) - 1);
     } else {
-        experience.upvotedBy = [...(experience.upvotedBy || []), req.user.id];
-        experience.upvotes++;
+        upvotedByList = [...upvotedByList, userId];
+        experience.upvotes = (experience.upvotes || 0) + 1;
     }
 
+    experience.upvotedBy = upvotedByList;
     await experience.save();
 
-    res.json({
+    return ApiResponse.success(res, {
         isHelpful: !hasVoted,
         upvotes: experience.upvotes
-    });
+    }, hasVoted ? 'Upvote removed' : 'Marked as helpful');
 });

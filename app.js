@@ -20,7 +20,6 @@ const corsOptions = {
       'https://caterview.online',
       'https://www.caterview.online',
       'https://api.caterview.online',
-      'https://caterview.onrender.com',
       'https://ca-terview-frontend.vercel.app'
     ].filter(Boolean).map(o => o.replace(/\/$/, ""));
 
@@ -66,20 +65,7 @@ app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // 7. ROUTES
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/colleges', require('./routes/colleges'));
-app.use('/api/experiences', require('./routes/experiences'));
-app.use('/api/notifications', require('./routes/notifications'));
-app.use('/api/users', require('./routes/users'));
-app.use('/api/admin', require('./routes/admin'));
-
-app.get('/', (req, res) => {
-  res.json({ message: 'Welcome to CATerview API' });
-});
-
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'success', message: 'Server is running' });
-});
+app.use('/', require('./routes'));
 
 // 8. ERROR HANDLING
 app.use((req, res) => {
@@ -87,11 +73,38 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error('GLOBAL ERROR:', err.message);
-  res.status(err.statusCode || 500).json({
-    status: 'error',
-    message: err.message || 'Internal server error'
-  });
+  const isDev = process.env.NODE_ENV === 'development';
+
+  let { statusCode, message } = err;
+
+  // Handle URI malformation
+  if (err instanceof URIError) {
+    statusCode = 400;
+    message = 'Failed to decode URI. Please check your URL';
+  }
+
+  if (!isDev && !err.isOperational) {
+    statusCode = 500;
+    message = 'Internal Server Error';
+  }
+
+  res.locals.errorMessage = err.message;
+
+  const response = {
+    success: false,
+    message,
+    ...(isDev && { stack: err.stack }),
+    // Handle Sequelize validation errors
+    ...(err.name === 'SequelizeValidationError' && {
+      errors: err.errors.map(e => e.message)
+    })
+  };
+
+  if (isDev) {
+    console.error('💥 ERROR:', err);
+  }
+
+  res.status(statusCode || 500).json(response);
 });
 
 module.exports = app;

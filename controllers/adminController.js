@@ -1,6 +1,8 @@
 const { InterviewExperience, College, User, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const asyncHandler = require('../utils/asyncHandler');
+const ApiError = require('../utils/apiError');
+const ApiResponse = require('../utils/apiResponse');
 
 /**
  * @desc    Get administrative dashboard statistics
@@ -8,20 +10,26 @@ const asyncHandler = require('../utils/asyncHandler');
  * @access  Private/Admin
  */
 exports.getAdminStats = asyncHandler(async (req, res) => {
-    const [totalExperiences, totalColleges, totalVerifiedExperiences] = await Promise.all([
+    const [totalExperiences, totalColleges, totalVerifiedExperiences, recentExperiences] = await Promise.all([
         InterviewExperience.count(),
         College.count(),
-        InterviewExperience.count({ where: { isVerified: true } })
+        InterviewExperience.count({ where: { isVerified: true } }),
+        InterviewExperience.findAll({
+            limit: 5,
+            order: [['createdAt', 'DESC']],
+            include: [{ model: College, as: 'college', attributes: ['name'] }]
+        })
     ]);
 
     const stats = {
         totalExperiences,
         totalColleges,
         totalVerifiedExperiences,
-        pendingExperiences: totalExperiences - totalVerifiedExperiences
+        pendingExperiences: totalExperiences - totalVerifiedExperiences,
+        recentExperiences
     };
 
-    res.json(stats);
+    return ApiResponse.success(res, stats, 'Admin statistics fetched successfully');
 });
 
 // --- EXPERIENCE ADMINISTRATION ---
@@ -30,7 +38,7 @@ const experienceIncludes = [
     {
         model: College,
         as: 'college',
-        attributes: ['id', 'name', 'slug']
+        attributes: ['id', 'name']
     },
     {
         model: User,
@@ -44,7 +52,7 @@ exports.getAllAdminExperiences = asyncHandler(async (req, res) => {
         include: experienceIncludes,
         order: [['createdAt', 'DESC']]
     });
-    res.json(experiences);
+    return ApiResponse.success(res, experiences, 'All experiences fetched successfully');
 });
 
 exports.getPendingExperiences = asyncHandler(async (req, res) => {
@@ -53,7 +61,7 @@ exports.getPendingExperiences = asyncHandler(async (req, res) => {
         include: experienceIncludes,
         order: [['createdAt', 'DESC']]
     });
-    res.json(experiences);
+    return ApiResponse.success(res, experiences, 'Pending experiences fetched successfully');
 });
 
 exports.getVerifiedExperiences = asyncHandler(async (req, res) => {
@@ -62,78 +70,102 @@ exports.getVerifiedExperiences = asyncHandler(async (req, res) => {
         include: experienceIncludes,
         order: [['createdAt', 'DESC']]
     });
-    res.json(experiences);
+    return ApiResponse.success(res, experiences, 'Verified experiences fetched successfully');
 });
 
 exports.getAdminExperienceById = asyncHandler(async (req, res) => {
-    const experience = await InterviewExperience.unscoped().findByPk(req.params.id, {
-        include: experienceIncludes,
-        paranoid: false
+    const experience = await InterviewExperience.findByPk(req.params.id, {
+        include: experienceIncludes
     });
 
     if (!experience) {
-        return res.status(404).json({ error: 'Experience not found' });
+        throw new ApiError(404, 'Experience not found');
     }
-    res.json(experience);
+    return ApiResponse.success(res, experience, 'Experience details fetched successfully');
 });
 
 exports.verifyExperience = asyncHandler(async (req, res) => {
-    const experience = await InterviewExperience.unscoped().findByPk(req.params.id);
+    const experience = await InterviewExperience.findByPk(req.params.id);
     if (!experience) {
-        return res.status(404).json({ error: 'Experience not found' });
+        throw new ApiError(404, 'Experience not found');
     }
 
     await experience.update({ isVerified: true });
-    res.json({ message: 'Experience verified successfully', id: experience.id, isVerified: true });
+    return ApiResponse.success(res, { id: experience.id, isVerified: true }, 'Experience verified successfully');
 });
 
 exports.rejectExperience = asyncHandler(async (req, res) => {
     const experience = await InterviewExperience.findByPk(req.params.id);
     if (!experience) {
-        return res.status(404).json({ error: 'Experience not found' });
+        throw new ApiError(404, 'Experience not found');
     }
+
     await experience.destroy();
-    res.json({ message: 'Experience rejected and deleted successfully' });
+    return ApiResponse.success(res, null, 'Experience rejected and deleted successfully');
 });
 
 // --- COLLEGE ADMINISTRATION ---
 
 exports.getAllAdminColleges = asyncHandler(async (req, res) => {
-    const colleges = await College.findAll({ order: [['name', 'ASC']] });
-    res.json({ message: 'Colleges fetched successfully', data: colleges });
+    const colleges = await College.findAll({
+        order: [['name', 'ASC']]
+    });
+    return ApiResponse.success(res, colleges, 'Colleges fetched successfully');
 });
 
 exports.createCollege = asyncHandler(async (req, res) => {
     const { name } = req.body;
-    if (!name) return res.status(400).json({ error: 'College name is required' });
+    if (!name) {
+        throw new ApiError(400, 'College name is required');
+    }
 
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-    const existing = await College.findOne({ where: { [Op.or]: [{ name }, { slug }] } });
+    const slug = name.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '');
 
-    if (existing) return res.status(400).json({ error: 'College already exists' });
+    const existing = await College.findOne({
+        where: { [Op.or]: [{ name }, { slug }] }
+    });
 
-    const college = await College.create({ name, slug, status: 'active' });
-    res.status(201).json(college);
+    if (existing) {
+        throw new ApiError(400, 'College with this name or slug already exists');
+    }
+
+    const college = await College.create({ name, slug });
+    return ApiResponse.success(res, college, 'College created successfully', 201);
 });
 
 exports.updateCollege = asyncHandler(async (req, res) => {
     const college = await College.findByPk(req.params.id);
-    if (!college) return res.status(404).json({ error: 'College not found' });
+    if (!college) {
+        throw new ApiError(404, 'College not found');
+    }
 
     const { name, status } = req.body;
     if (name && name !== college.name) {
-        const newSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+        const newSlug = name.toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)+/g, '');
+
         const existing = await College.findOne({
-            where: { id: { [Op.ne]: req.params.id }, [Op.or]: [{ name }, { slug: newSlug }] }
+            where: {
+                id: { [Op.ne]: req.params.id },
+                [Op.or]: [{ name }, { slug: newSlug }]
+            }
         });
-        if (existing) return res.status(400).json({ error: 'College already exists' });
+
+        if (existing) {
+            throw new ApiError(400, 'Another college already uses this name or slug');
+        }
+
         college.name = name;
         college.slug = newSlug;
     }
+
     if (status) college.status = status;
 
     await college.save();
-    res.json({ message: 'College updated successfully', data: college });
+    return ApiResponse.success(res, college, 'College updated successfully');
 });
 
 // --- USER ADMINISTRATION ---
@@ -155,8 +187,15 @@ exports.getAllAdminUsers = asyncHandler(async (req, res) => {
         offset: parseInt(offset)
     });
 
-    const totalPages = Math.ceil(count / limit);
-    res.json({ users, pagination: { total: count, totalPages, currentPage: parseInt(page) } });
+    return ApiResponse.success(res, {
+        users,
+        pagination: {
+            total: count,
+            totalPages: Math.ceil(count / limit),
+            currentPage: parseInt(page),
+            limit: parseInt(limit)
+        }
+    }, 'Users fetched successfully');
 });
 
 exports.getAdminUserById = asyncHandler(async (req, res) => {
@@ -165,9 +204,15 @@ exports.getAdminUserById = asyncHandler(async (req, res) => {
         include: [{
             model: InterviewExperience,
             as: 'interviewExperiences',
+            limit: 10,
+            order: [['createdAt', 'DESC']],
             include: [{ model: College, as: 'college', attributes: ['name'] }]
         }]
     });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(user);
+
+    if (!user) {
+        throw new ApiError(404, 'User not found');
+    }
+
+    return ApiResponse.success(res, user, 'User details fetched successfully');
 });

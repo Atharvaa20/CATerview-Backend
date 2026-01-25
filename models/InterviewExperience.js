@@ -7,7 +7,7 @@ module.exports = (sequelize, Sequelize, DataTypes) => {
     },
     title: {
       type: DataTypes.STRING,
-      allowNull: true,
+      allowNull: false,
       validate: {
         notEmpty: true,
         len: [5, 255]
@@ -25,16 +25,7 @@ module.exports = (sequelize, Sequelize, DataTypes) => {
     profile: {
       type: DataTypes.JSONB,
       allowNull: false,
-      validate: {
-        notEmpty: true
-      },
-      get() {
-        const rawValue = this.getDataValue('profile');
-        return typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
-      },
-      set(value) {
-        this.setDataValue('profile', typeof value === 'string' ? value : JSON.stringify(value));
-      }
+      defaultValue: {}
     },
     watSummary: {
       type: DataTypes.TEXT,
@@ -48,14 +39,7 @@ module.exports = (sequelize, Sequelize, DataTypes) => {
       type: DataTypes.JSONB,
       field: 'pi_questions',
       allowNull: true,
-      get() {
-        const rawValue = this.getDataValue('piQuestions');
-        return rawValue ? (typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue) : [];
-      },
-      set(value) {
-        const questions = Array.isArray(value) ? value : [];
-        this.setDataValue('piQuestions', JSON.stringify(questions));
-      }
+      defaultValue: []
     },
     finalRemarks: {
       type: DataTypes.TEXT,

@@ -1,6 +1,7 @@
-const { College, InterviewExperience, User } = require('../models');
+const { College, InterviewExperience, User, sequelize } = require('../models');
 const asyncHandler = require('../utils/asyncHandler');
-const { sequelize } = require('../models');
+const ApiError = require('../utils/apiError');
+const ApiResponse = require('../utils/apiResponse');
 
 /**
  * @desc    Get all colleges
@@ -12,7 +13,8 @@ exports.getAllColleges = asyncHandler(async (req, res) => {
         order: [['name', 'ASC']],
         attributes: ['id', 'name', 'slug']
     });
-    res.json(colleges);
+
+    return ApiResponse.success(res, colleges, 'Colleges fetched successfully');
 });
 
 /**
@@ -22,6 +24,12 @@ exports.getAllColleges = asyncHandler(async (req, res) => {
  */
 exports.getCollegeExperiences = asyncHandler(async (req, res) => {
     const collegeId = req.params.id;
+
+    // Check if college exists
+    const collegeExists = await College.findByPk(collegeId);
+    if (!collegeExists) {
+        throw new ApiError(404, 'College not found');
+    }
 
     const experiences = await InterviewExperience.findAll({
         where: { collegeId },
@@ -40,7 +48,7 @@ exports.getCollegeExperiences = asyncHandler(async (req, res) => {
         order: [['createdAt', 'DESC']]
     });
 
-    res.json(experiences);
+    return ApiResponse.success(res, experiences, 'College experiences fetched successfully');
 });
 
 /**
@@ -50,6 +58,11 @@ exports.getCollegeExperiences = asyncHandler(async (req, res) => {
  */
 exports.getCollegeStats = asyncHandler(async (req, res) => {
     const collegeId = req.params.id;
+
+    const collegeExists = await College.findByPk(collegeId);
+    if (!collegeExists) {
+        throw new ApiError(404, 'College not found');
+    }
 
     const stats = await InterviewExperience.findAll({
         where: {
@@ -73,13 +86,12 @@ exports.getCollegeStats = asyncHandler(async (req, res) => {
         ]
     });
 
-    res.json({
-        message: 'Statistics fetched successfully',
-        data: {
-            total: stats[0]?.get('total') || 0,
-            avgCatPercentile: stats[0]?.get('avgCatPercentile') || 0,
-            avgWorkExp: stats[0]?.get('avgWorkExp') || 0,
-            avgQuestions: stats[0]?.get('avgQuestions') || 0
-        }
-    });
+    const data = {
+        total: parseInt(stats[0]?.get('total') || 0),
+        avgCatPercentile: parseFloat(stats[0]?.get('avgCatPercentile') || 0).toFixed(2),
+        avgWorkExp: parseFloat(stats[0]?.get('avgWorkExp') || 0).toFixed(2),
+        avgQuestions: parseFloat(stats[0]?.get('avgQuestions') || 0).toFixed(1)
+    };
+
+    return ApiResponse.success(res, data, 'Statistics fetched successfully');
 });

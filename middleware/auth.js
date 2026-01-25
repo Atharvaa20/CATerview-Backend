@@ -1,62 +1,67 @@
-const jwt = require('jsonwebtoken')
-const { User } = require('../models')
+const jwt = require('jsonwebtoken');
+const { User } = require('../models');
+const ApiError = require('../utils/apiError');
+const asyncHandler = require('../utils/asyncHandler');
 
-const auth = async (req, res, next) => {
+/**
+ * Middleware to authenticate requests using JWT
+ */
+const auth = asyncHandler(async (req, res, next) => {
+  const authHeader = req.header('Authorization');
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : null;
+
+  if (!token) {
+    throw new ApiError(401, 'Please authenticate: No token provided');
+  }
+
   try {
-    console.log('Auth middleware triggered')
-    const token = req.header('Authorization')?.replace('Bearer ', '')
-    console.log('Received token:', !!token)
-    
-    if (!token) {
-      console.log('No token found in Authorization header')
-      throw new Error('No token provided')
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const user = await User.findByPk(decoded.userId);
+
+    if (!user) {
+      throw new ApiError(401, 'The user belonging to this token no longer exists');
     }
 
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET)
-      console.log('Token verified successfully')
-      
-      const user = await User.findByPk(decoded.userId)
-      if (!user) {
-        console.log('User not found in database')
-        throw new Error('User not found')
-      }
-
-      // Add role from token to user object
-      user.role = decoded.role
-
-      req.token = token
-      req.user = user
-      next()
-    } catch (jwtError) {
-      console.error('JWT verification failed:', jwtError)
-      throw new Error('Invalid token')
+    if (!user.isVerified) {
+      throw new ApiError(401, 'Please verify your email to access this resource');
     }
-  } catch (error) {
-    console.error('Authentication error:', error.message)
-    res.status(401).json({ error: error.message || 'Please authenticate' })
-  }
-}
 
-const admin = async (req, res, next) => {
-  try {
-    // First authenticate the user
-    await auth(req, res, () => {
-      // Then check if they're an admin
-      if (req.user.role !== 'admin') {
-        res.status(403).json({ error: 'Access denied' })
-        return
-      }
-      next()
-    })
+    // Attach user and token to request object
+    req.user = user;
+    req.token = token;
+    next();
   } catch (error) {
-    console.error('Admin middleware error:', error)
-    res.status(500).json({ error: 'Internal server error' })
-    return
+    if (error.name === 'JsonWebTokenError') {
+      throw new ApiError(401, 'Invalid token. Please log in again.');
+    }
+    if (error.name === 'TokenExpiredError') {
+      throw new ApiError(401, 'Your token has expired. Please log in again.');
+    }
+    throw error;
   }
-}
+});
+
+/**
+ * Middleware to restrict access to specific roles
+ * @param {...string} roles - Allowed roles
+ */
+const restrictTo = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      throw new ApiError(403, 'You do not have permission to perform this action');
+    }
+    next();
+  };
+};
+
+/**
+ * Convenience middleware for admin-only routes
+ */
+const admin = [auth, restrictTo('admin')];
 
 module.exports = {
   auth,
+  restrictTo,
   admin
-}
+};

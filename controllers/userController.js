@@ -1,5 +1,7 @@
 const { User, sequelize, models } = require('../models');
 const asyncHandler = require('../utils/asyncHandler');
+const ApiError = require('../utils/apiError');
+const ApiResponse = require('../utils/apiResponse');
 
 /**
  * @desc    Get current user profile
@@ -8,7 +10,7 @@ const asyncHandler = require('../utils/asyncHandler');
  */
 exports.getMe = asyncHandler(async (req, res) => {
     const user = await User.findByPk(req.user.id, {
-        attributes: ['id', 'name', 'email', 'role'],
+        attributes: ['id', 'name', 'email', 'role', 'createdAt'],
         include: [
             {
                 model: models.InterviewExperience,
@@ -20,17 +22,17 @@ exports.getMe = asyncHandler(async (req, res) => {
                         as: 'college',
                         attributes: ['id', 'name', 'slug']
                     }
-                ],
-                order: [['createdAt', 'DESC']]
+                ]
             }
-        ]
+        ],
+        order: [[{ model: models.InterviewExperience, as: 'authoredExperiences' }, 'createdAt', 'DESC']]
     });
 
     if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        throw new ApiError(404, 'User not found');
     }
 
-    res.json(user);
+    return ApiResponse.success(res, user, 'Profile fetched successfully');
 });
 
 /**
@@ -39,10 +41,7 @@ exports.getMe = asyncHandler(async (req, res) => {
  * @access  Private/Admin
  */
 exports.getUserById = asyncHandler(async (req, res) => {
-    if (req.user.role !== 'admin') {
-        return res.status(403).json({ error: 'Not authorized to access this resource' });
-    }
-
+    // Note: Admin check is handled by middleware
     const user = await User.findByPk(req.params.id, {
         attributes: ['id', 'name', 'email', 'role', 'createdAt'],
         include: [
@@ -56,17 +55,17 @@ exports.getUserById = asyncHandler(async (req, res) => {
                         as: 'college',
                         attributes: ['id', 'name', 'slug']
                     }
-                ],
-                order: [['createdAt', 'DESC']]
+                ]
             }
-        ]
+        ],
+        order: [[{ model: models.InterviewExperience, as: 'authoredExperiences' }, 'createdAt', 'DESC']]
     });
 
     if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        throw new ApiError(404, 'User not found');
     }
 
-    res.json(user);
+    return ApiResponse.success(res, user, 'User details fetched successfully');
 });
 
 /**
@@ -78,7 +77,7 @@ exports.updateMe = asyncHandler(async (req, res) => {
     const { name, email } = req.body;
 
     if (!name || !email) {
-        return res.status(400).json({ error: 'Name and email are required' });
+        throw new ApiError(400, 'Name and email are required');
     }
 
     // Check if email is already taken by another user
@@ -90,12 +89,12 @@ exports.updateMe = asyncHandler(async (req, res) => {
     });
 
     if (existingUser) {
-        return res.status(400).json({ error: 'Email is already in use' });
+        throw new ApiError(400, 'Email is already in use by another account');
     }
 
     const user = await User.findByPk(req.user.id);
     if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        throw new ApiError(404, 'User profile not found');
     }
 
     user.name = name;
@@ -106,5 +105,5 @@ exports.updateMe = asyncHandler(async (req, res) => {
         attributes: ['id', 'name', 'email', 'role', 'createdAt']
     });
 
-    res.json(updatedUser);
+    return ApiResponse.success(res, updatedUser, 'Profile updated successfully');
 });
