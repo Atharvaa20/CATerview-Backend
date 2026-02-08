@@ -4,8 +4,8 @@ const adminController = require('../../controllers/adminController');
 
 router.get('/', adminController.getAllAdminColleges);
 router.post('/', adminController.createCollege);
-router.put('/:id(\\d+)', adminController.updateCollege);
-router.delete('/:id(\\d+)', adminController.deleteCollege);
+router.put('/:id', adminController.updateCollege);
+router.delete('/:id', adminController.deleteCollege);
 
 module.exports = router;
 
