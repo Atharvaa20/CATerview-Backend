@@ -64,14 +64,27 @@ exports.verifyOtp = asyncHandler(async (req, res) => {
 
     // Handle Password Reset OTP Verification
     if (type === 'password_reset') {
-        if (user.resetPasswordOtp !== otp || isOtpExpired(user.resetPasswordOtpExpires)) {
+        const storedOtp = String(user.resetPasswordOtp || '').trim();
+        const providedOtp = String(otp || '').trim();
+        const isExpired = isOtpExpired(user.resetPasswordOtpExpires);
+
+        console.log('🔐 Password Reset OTP Verification:');
+        console.log('  - Stored OTP:', storedOtp, '| Type:', typeof user.resetPasswordOtp);
+        console.log('  - Provided OTP:', providedOtp, '| Type:', typeof otp);
+        console.log('  - OTP Match:', storedOtp === providedOtp);
+        console.log('  - Is Expired:', isExpired, '| Expiry:', user.resetPasswordOtpExpires);
+
+        if (!storedOtp || storedOtp !== providedOtp || isExpired) {
             throw new ApiError(400, 'Invalid or expired password reset OTP');
         }
         return ApiResponse.success(res, null, 'OTP verified successfully');
     }
 
     // Handle Email Verification OTP
-    if (user.otp !== otp || isOtpExpired(user.otpExpires)) {
+    const storedVerifyOtp = String(user.otp || '').trim();
+    const providedVerifyOtp = String(otp || '').trim();
+
+    if (!storedVerifyOtp || storedVerifyOtp !== providedVerifyOtp || isOtpExpired(user.otpExpires)) {
         throw new ApiError(400, 'Invalid or expired verification OTP');
     }
 
