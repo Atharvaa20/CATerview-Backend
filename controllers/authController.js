@@ -51,7 +51,7 @@ exports.register = asyncHandler(async (req, res) => {
  * @access  Public
  */
 exports.verifyOtp = asyncHandler(async (req, res) => {
-    const { email, otp } = req.body;
+    const { email, otp, type } = req.body;
 
     if (!email || !otp) {
         throw new ApiError(400, 'Email and OTP are required');
@@ -62,8 +62,17 @@ exports.verifyOtp = asyncHandler(async (req, res) => {
         throw new ApiError(404, 'User not found');
     }
 
+    // Handle Password Reset OTP Verification
+    if (type === 'password_reset') {
+        if (user.resetPasswordOtp !== otp || isOtpExpired(user.resetPasswordOtpExpires)) {
+            throw new ApiError(400, 'Invalid or expired password reset OTP');
+        }
+        return ApiResponse.success(res, null, 'OTP verified successfully');
+    }
+
+    // Handle Email Verification OTP
     if (user.otp !== otp || isOtpExpired(user.otpExpires)) {
-        throw new ApiError(400, 'Invalid or expired OTP');
+        throw new ApiError(400, 'Invalid or expired verification OTP');
     }
 
     user.isVerified = true;
@@ -190,7 +199,7 @@ exports.resetPassword = asyncHandler(async (req, res) => {
  * @access  Public
  */
 exports.resendOtp = asyncHandler(async (req, res) => {
-    const { email } = req.body;
+    const { email, type } = req.body;
 
     if (!email) {
         throw new ApiError(400, 'Email is required');
@@ -204,11 +213,19 @@ exports.resendOtp = asyncHandler(async (req, res) => {
     const otp = generateOTP();
     const otpExpires = getOtpExpiryTime();
 
+    if (type === 'password_reset') {
+        user.resetPasswordOtp = otp;
+        user.resetPasswordOtpExpires = otpExpires;
+        await user.save();
+        await sendPasswordResetOtpEmail(email, otp);
+        return ApiResponse.success(res, null, 'New password reset OTP sent to your email');
+    }
+
     user.otp = otp;
     user.otpExpires = otpExpires;
     await user.save();
 
     await sendOtpEmail(email, otp);
 
-    return ApiResponse.success(res, null, 'New OTP sent to your email');
+    return ApiResponse.success(res, null, 'New verification OTP sent to your email');
 });

@@ -10,12 +10,27 @@ const ApiResponse = require('../utils/apiResponse');
  */
 exports.getAllColleges = asyncHandler(async (req, res) => {
     const colleges = await College.findAll({
-        order: [['name', 'ASC']],
-        attributes: ['id', 'name', 'slug']
+        attributes: [
+            'id',
+            'name',
+            'slug',
+            [
+                sequelize.literal(`(
+                    SELECT COUNT(*)
+                    FROM interview_experiences AS ie
+                    WHERE
+                        ie.college_id = "College".id
+                        AND ie.is_verified = true
+                )`),
+                'experienceCount'
+            ]
+        ],
+        order: [['name', 'ASC']]
     });
 
     return ApiResponse.success(res, colleges, 'Colleges fetched successfully');
 });
+
 
 /**
  * @desc    Get college experiences

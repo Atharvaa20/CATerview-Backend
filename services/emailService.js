@@ -13,10 +13,18 @@ const transporter = nodemailer.createTransport({
   }
 });
 
+const ApiError = require('../utils/apiError');
+
 /**
  * Function to send email using SMTP and Nodemailer
  */
 const sendEmail = async (email, options) => {
+  // Validate basic SMTP settings before attempting send
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.error('❌ SMTP configuration missing (SMTP_USER or SMTP_PASS)');
+    throw new ApiError(500, 'Email service is currently misconfigured. Please contact support.');
+  }
+
   try {
     const { subject, html } = options;
 
@@ -34,8 +42,17 @@ const sendEmail = async (email, options) => {
     console.log('✅ Email sent successfully via SMTP! Message ID:', info.messageId);
     return true;
   } catch (error) {
-    console.error('❌ Error sending email via SMTP:', error.message);
-    throw new Error('Failed to send email');
+    console.error('❌ SMTP Error Detail:', error);
+
+    // Check for common SMTP errors
+    if (error.code === 'EAUTH') {
+      throw new ApiError(500, 'Email authentication failed. Please check SMTP credentials.');
+    }
+    if (error.code === 'ESOCKET' || error.code === 'ETIMEDOUT') {
+      throw new ApiError(500, 'Connection to email server timed out. Please try again later.');
+    }
+
+    throw new ApiError(500, `Failed to send email: ${error.message}`);
   }
 };
 

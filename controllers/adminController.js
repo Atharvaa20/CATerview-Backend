@@ -168,6 +168,17 @@ exports.updateCollege = asyncHandler(async (req, res) => {
     return ApiResponse.success(res, college, 'College updated successfully');
 });
 
+exports.deleteCollege = asyncHandler(async (req, res) => {
+    const college = await College.findByPk(req.params.id);
+    if (!college) {
+        throw new ApiError(404, 'College not found');
+    }
+
+    await college.destroy();
+    return ApiResponse.success(res, null, 'College deleted successfully');
+});
+
+
 // --- USER ADMINISTRATION ---
 
 exports.getAllAdminUsers = asyncHandler(async (req, res) => {

@@ -10,6 +10,17 @@ const initializeDatabase = async () => {
         console.log('✅ Database connected.');
 
         if (process.env.NODE_ENV !== 'production') {
+            // Pre-sync fix: Fill NULL titles to allow applying NOT NULL constraints
+            try {
+                await sequelize.query(`
+                    UPDATE interview_experiences 
+                    SET title = CONCAT('Interview Experience ', year) 
+                    WHERE title IS NULL
+                `);
+            } catch (queryErr) {
+                // Ignore if table doesn't exist yet
+            }
+
             await sequelize.sync({ alter: true });
             console.log('🔄 Models synced (Development Mode).');
         } else {
